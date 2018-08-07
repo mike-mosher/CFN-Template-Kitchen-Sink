@@ -1,0 +1,488 @@
+Description: CFN-Template-Kitchen-Sink -- Provider VPC Resources
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  ProviderVPCCidrBlock:
+    Type: String
+    Description: 'The /16 CIDR block for the Provider VPC (Format Example: 10.0.0.0/16)'
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 10.0.0.0/16
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.0\.0/16
+    ConstraintDescription: Must be a valid IP CIDR block with a /16
+  CaseId:
+    Type: Number
+    Description: The Paragon Case ID for this environment
+    MinValue: '4000000000'
+    MaxValue: '5000000000'
+    ConstraintDescription: Must be a valid 10 digit number between 4000000000 and
+      5000000000
+Mappings:
+  AmazonLinuxAMI:
+    ap-south-1:
+      hvm: ami-d5c18eba
+    eu-west-3:
+      hvm: ami-dd8b3ca0
+    eu-west-2:
+      hvm: ami-e7d6c983
+    eu-west-1:
+      hvm: ami-1a962263
+    ap-northeast-2:
+      hvm: ami-1196317f
+    ap-northeast-1:
+      hvm: ami-da9e2cbc
+    sa-east-1:
+      hvm: ami-286f2a44
+    ca-central-1:
+      hvm: ami-d29e25b6
+    ap-southeast-1:
+      hvm: ami-c63d6aa5
+    ap-southeast-2:
+      hvm: ami-ff4ea59d
+    eu-central-1:
+      hvm: ami-bf2ba8d0
+    us-east-1:
+      hvm: ami-55ef662f
+    us-east-2:
+      hvm: ami-15e9c770
+    us-west-1:
+      hvm: ami-a51f27c5
+    us-west-2:
+      hvm: ami-bf4193c7
+  AmazonLinux2AMI:
+    ap-south-1:
+      hvm: ami-79c78f16
+    eu-west-3:
+      hvm: ami-185fe865
+    eu-west-2:
+      hvm: ami-424c5526
+    eu-west-1:
+      hvm: ami-b09e1ac9
+    ap-northeast-2:
+      hvm: ami-1559ff7b
+    ap-northeast-1:
+      hvm: ami-2a34b64c
+    sa-east-1:
+      hvm: ami-bd87c1d1
+    ca-central-1:
+      hvm: ami-9ab802fe
+    ap-southeast-1:
+      hvm: ami-b45030c8
+    ap-southeast-2:
+      hvm: ami-71867013
+    eu-central-1:
+      hvm: ami-29ae2546
+    us-east-1:
+      hvm: ami-2452275e
+    us-east-2:
+      hvm: ami-e97c548c
+    us-west-1:
+      hvm: ami-ee03078e
+    us-west-2:
+      hvm: ami-7707a10f
+Resources:
+  ProviderVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref 'ProviderVPCCidrBlock'
+      InstanceTenancy: default
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}'
+  ProviderVPCPublicSn1Az1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.0.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ProviderVPC'
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Pub-SN-1-AZ-1'
+    DependsOn: ProviderVPC
+  ProviderVPCPrivateSn1Az1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.1.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ProviderVPC'
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Priv-SN-1-AZ-1'
+    DependsOn: ProviderVPC
+  ProviderVPCPublicSn2Az2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.2.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '1'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ProviderVPC'
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Pub-SN-2-AZ-2'
+    DependsOn: ProviderVPC
+  ProviderVPCPrivateSn2Az2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.3.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ProviderVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '1'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ProviderVPC'
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Priv-SN-2-AZ-2'
+    DependsOn: ProviderVPC
+  ProviderVPCPubRt1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'ProviderVPC'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Pub-RT-1'
+    DependsOn: ProviderVPC
+  ProviderVPCPrivRt1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'ProviderVPC'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Priv-RT-1'
+    DependsOn: ProviderVPC
+  ProviderVPCIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-IGW-1'
+  ProviderVPCIGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'ProviderVPC'
+      InternetGatewayId: !Ref 'ProviderVPCIGW'
+    DependsOn:
+      - ProviderVPC
+      - ProviderVPCIGW
+  ProviderVPCNlbEip1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: ProviderVPC
+    DependsOn: ProviderVPC
+  ProviderVPCNlbEip2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: ProviderVPC
+    DependsOn: ProviderVPC
+  ProviderVPCNatGWEip1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: ProviderVPC
+    DependsOn: ProviderVPC
+  ProviderVPCNatGW:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'ProviderVPCNatGWEip1.AllocationId'
+      SubnetId: !Ref 'ProviderVPCPublicSn1Az1'
+    DependsOn: ProviderVPCIGWAttachment
+  ProviderVPCPubSn1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ProviderVPCPubRt1'
+      SubnetId: !Ref 'ProviderVPCPublicSn1Az1'
+    DependsOn:
+      - ProviderVPCPublicSn1Az1
+      - ProviderVPCPubRt1
+  ProviderVPCPubSn2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ProviderVPCPubRt1'
+      SubnetId: !Ref 'ProviderVPCPublicSn2Az2'
+    DependsOn:
+      - ProviderVPCPublicSn2Az2
+      - ProviderVPCPubRt1
+  ProviderVPCPrivSn1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ProviderVPCPrivRt1'
+      SubnetId: !Ref 'ProviderVPCPrivateSn1Az1'
+    DependsOn:
+      - ProviderVPCPrivateSn1Az1
+      - ProviderVPCPrivRt1
+  ProviderVPCPrivSn2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ProviderVPCPrivRt1'
+      SubnetId: !Ref 'ProviderVPCPrivateSn2Az2'
+    DependsOn:
+      - ProviderVPCPrivateSn2Az2
+      - ProviderVPCPrivRt1
+  ProviderVPCPublicDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref 'ProviderVPCPubRt1'
+      GatewayId: !Ref 'ProviderVPCIGW'
+    DependsOn:
+      - ProviderVPCIGWAttachment
+      - ProviderVPCIGW
+      - ProviderVPCPubRt1
+  ProviderVPCPrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref 'ProviderVPCPrivRt1'
+      NatGatewayId: !Ref 'ProviderVPCNatGW'
+    DependsOn:
+      - ProviderVPCIGWAttachment
+      - ProviderVPCNatGW
+      - ProviderVPCPrivRt1
+  ProviderVPCPubInstSshSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ProviderVPCPubInstSshSG
+      GroupDescription: SSH Traffic from Everywhere
+      VpcId: !Ref 'ProviderVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+          Description: SSH from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ProviderVPC
+  ProviderVPCPubInstHttpSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ProviderVPCPubInstHttpSG
+      GroupDescription: HTTP Traffic from Everywhere
+      VpcId: !Ref 'ProviderVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+          Description: HTTP from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ProviderVPC
+  ProviderVPCPubInstHttpsSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ProviderVPCPubInstHttpsSG
+      GroupDescription: HTTPS Traffic from Everywhere
+      VpcId: !Ref 'ProviderVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ProviderVPC
+  ProviderVPCPubInstRdpSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ProviderVPCPubInstRdpSG
+      GroupDescription: RDP Traffic from Everywhere
+      VpcId: !Ref 'ProviderVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '3389'
+          ToPort: '3389'
+          CidrIp: 0.0.0.0/0
+          Description: RDP from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ProviderVPC
+  ProviderVPCAllVpcCidrSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ProviderVPCAllVpcCidrSG
+      GroupDescription: SG for Private Instances in Provider VPC
+      VpcId: !Ref 'ProviderVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '0'
+          ToPort: '65535'
+          CidrIp: !Ref 'ProviderVPCCidrBlock'
+          Description: Allow Provider VPC CIDR to Private Instances
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-Priv-Inst-SG'
+    DependsOn: ProviderVPC
+  ProviderVPCElbSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ProviderVPCElbSG
+      GroupDescription: SG for ELB in Provider VPC
+      VpcId: !Ref 'ProviderVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP to ELB
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS to ELB
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-ELB-SG'
+    DependsOn: ProviderVPC
+  ProviderVPCAlbSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ProviderVPCAlbSG
+      GroupDescription: SG for ALB in Provider VPC
+      VpcId: !Ref 'ProviderVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP to ALB
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS to ALB
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}-ALB-SG'
+    DependsOn: ProviderVPC
+Outputs:
+  OutputProviderVPC:
+    Description: ProviderVPC
+    Value: !Ref 'ProviderVPC'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPC'
+  OutputProviderVPCPublicSn1Az1:
+    Description: ProviderVPCPublicSn1Az1
+    Value: !Ref 'ProviderVPCPublicSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPublicSn1Az1'
+  OutputProviderVPCPrivateSn1Az1:
+    Description: ProviderVPCPrivateSn1Az1
+    Value: !Ref 'ProviderVPCPrivateSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPrivateSn1Az1'
+  OutputProviderVPCPublicSn2Az2:
+    Description: ProviderVPCPublicSn2Az2
+    Value: !Ref 'ProviderVPCPublicSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPublicSn2Az2'
+  OutputProviderVPCPrivateSn2Az2:
+    Description: ProviderVPCPrivateSn2Az2
+    Value: !Ref 'ProviderVPCPrivateSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPrivateSn2Az2'
+  OutputProviderVPCPubInstSshSG:
+    Description: ProviderVPCPubInstSshSG
+    Value: !Ref 'ProviderVPCPubInstSshSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPubInstSshSG'
+  OutputProviderVPCPubInstHttpSG:
+    Description: ProviderVPCPubInstHttpSG
+    Value: !Ref 'ProviderVPCPubInstHttpSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPubInstHttpSG'
+  OutputProviderVPCPubInstHttpsSG:
+    Description: ProviderVPCPubInstHttpsSG
+    Value: !Ref 'ProviderVPCPubInstHttpsSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPubInstHttpsSG'
+  OutputProviderVPCPubInstRdpSG:
+    Description: ProviderVPCPubInstRdpSG
+    Value: !Ref 'ProviderVPCPubInstRdpSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPubInstRdpSG'
+  OutputProviderVPCAllVpcCidrSG:
+    Description: ProviderVPCAllVpcCidrSG
+    Value: !Ref 'ProviderVPCAllVpcCidrSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCAllVpcCidrSG'
+  OutputProviderVPCPubRt1:
+    Description: ProviderVPCPubRt1
+    Value: !Ref 'ProviderVPCPubRt1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPubRt1'
+  OutputProviderVPCPrivRt1:
+    Description: ProviderVPCPrivRt1
+    Value: !Ref 'ProviderVPCPrivRt1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPrivRt1'
+  OutputProviderVPCNlbEip1:
+    Description: ProviderVPCNlbEip1
+    Value: !Ref 'ProviderVPCNlbEip1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCNlbEip1'
+  OutputProviderVPCNlbEip2:
+    Description: ProviderVPCNlbEip2
+    Value: !Ref 'ProviderVPCNlbEip2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCNlbEip2'

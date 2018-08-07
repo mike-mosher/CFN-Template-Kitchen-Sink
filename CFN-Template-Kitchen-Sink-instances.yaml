@@ -1,0 +1,806 @@
+Description: CFN-Template-Kitchen-Sink -- Instances
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  KeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of an Amazon EC2 key pair in the region in which you are
+      creating a CloudFormation stack.
+    Default: VPC_Break-Fix_Project
+  CaseId:
+    Type: Number
+    Description: The Paragon Case ID for this environment
+    MinValue: '4000000000'
+    MaxValue: '5000000000'
+    ConstraintDescription: Must be a valid 10 digit number between 4000000000 and
+      5000000000
+  AmazonLinuxAMIVersion:
+    Type: String
+    Default: AmazonLinuxAMI
+    AllowedValues:
+      - AmazonLinuxAMI
+      - AmazonLinux2AMI
+Mappings:
+  AmazonLinuxAMI:
+    ap-south-1:
+      hvm: ami-d5c18eba
+    eu-west-3:
+      hvm: ami-dd8b3ca0
+    eu-west-2:
+      hvm: ami-e7d6c983
+    eu-west-1:
+      hvm: ami-1a962263
+    ap-northeast-2:
+      hvm: ami-1196317f
+    ap-northeast-1:
+      hvm: ami-da9e2cbc
+    sa-east-1:
+      hvm: ami-286f2a44
+    ca-central-1:
+      hvm: ami-d29e25b6
+    ap-southeast-1:
+      hvm: ami-c63d6aa5
+    ap-southeast-2:
+      hvm: ami-ff4ea59d
+    eu-central-1:
+      hvm: ami-bf2ba8d0
+    us-east-1:
+      hvm: ami-55ef662f
+    us-east-2:
+      hvm: ami-15e9c770
+    us-west-1:
+      hvm: ami-a51f27c5
+    us-west-2:
+      hvm: ami-bf4193c7
+  AmazonLinux2AMI:
+    ap-south-1:
+      hvm: ami-79c78f16
+    eu-west-3:
+      hvm: ami-185fe865
+    eu-west-2:
+      hvm: ami-424c5526
+    eu-west-1:
+      hvm: ami-b09e1ac9
+    ap-northeast-2:
+      hvm: ami-1559ff7b
+    ap-northeast-1:
+      hvm: ami-2a34b64c
+    sa-east-1:
+      hvm: ami-bd87c1d1
+    ca-central-1:
+      hvm: ami-9ab802fe
+    ap-southeast-1:
+      hvm: ami-b45030c8
+    ap-southeast-2:
+      hvm: ami-71867013
+    eu-central-1:
+      hvm: ami-29ae2546
+    us-east-1:
+      hvm: ami-2452275e
+    us-east-2:
+      hvm: ami-e97c548c
+    us-west-1:
+      hvm: ami-ee03078e
+    us-west-2:
+      hvm: ami-7707a10f
+Resources:
+  ProviderVPCPubInstSn1Az1:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}--Public-Inst-Sn1-Az1'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn1Az1
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCPubInstSshSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpsSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'true'
+      UserData: !Base64 |+
+        #!/bin/bash -xe
+
+        # to make this all easier
+        sudo su
+
+        # Install needed packages for apache 2.4, and awslogs
+        yum install -y git gcc httpd24 httpd24-devel httpd24-tools mod24_ssl awslogs
+
+        # Build proxy protocol module for apache
+        git clone https://github.com/roadrunner2/mod-proxy-protocol.git
+        cd mod-proxy-protocol
+        make
+        cp .libs/mod_proxy_protocol.so /etc/httpd/modules/
+
+        # Copy my certificate to this host
+        # Note: Needs permissions to access S3 (role)
+        aws s3 cp s3://<add-link-to-your-cert>.crt /etc/pki/tls/certs/
+        aws s3 cp s3://<add-link-to-your-key>.key /etc/pki/tls/private/
+
+
+        # Edit httpd.conf with our virtual hosts and listener ports
+        cat >> /etc/httpd/conf/httpd.conf <<- EndOfMessage
+
+        Listen 8080
+        Listen 443 https
+
+        <VirtualHost *:80>
+            DocumentRoot /var/www/html/
+            # RewriteEngine On
+            # RewriteCond %{HTTP:X-Forwarded-Proto} =http
+            # RewriteRule . https://%{HTTP:Host}%{REQUEST_URI} [L,R=permanent]
+        </VirtualHost>
+
+        <VirtualHost *:8080>
+            DocumentRoot /var/www/html/
+            LoadModule proxy_protocol_module modules/mod_proxy_protocol.so
+            ProxyProtocol On
+            CustomLog /var/log/httpd/TCP-Proxy-Logs/access_log "%h %p %a %{remote}p %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\""
+            ErrorLog /var/log/httpd/TCP-Proxy-Logs/error_log
+        </VirtualHost>
+
+        <VirtualHost *:443>
+            SSLEngine on
+            SSLCertificateFile /etc/pki/tls/certs/<add-link-to-your-cert>.crt
+            SSLCertificateKeyFile /etc/pki/tls/private/<add-link-to-your-key>.key
+            <Directory /var/www/html>
+            AllowOverride All
+            </Directory>
+            DocumentRoot /var/www/html
+            CustomLog /var/log/httpd/ssl_access_log combined
+            ErrorLog /var/log/httpd/ssl_error_log
+        </VirtualHost>
+
+        EndOfMessage
+
+        # Move ssl.conf out of the way
+        sudo mv /etc/httpd/conf.d/ssl.conf /etc/httpd/conf.d/ssl.conf.old
+
+        # Make log directory for TCP listener on port 8080
+        mkdir /var/log/httpd/TCP-Proxy-Logs/
+
+        # Create awesome default webpage
+        cat >> /var/www/html/index.html <<- EndOfMessage
+        <html>
+          <head>
+            <title>Emergency Broadcast System</title>
+            <style>
+              html {
+                background: url(https://i.ytimg.com/vi/WiH8G0x2yWA/maxresdefault.jpg) no-repeat center center fixed;
+                background-size: cover;
+                -webkit-background-size: cover;
+                -moz-background-size: cover;
+                -o-background-size: cover;
+              }
+              h1 {
+                text-align: center;
+              }
+            </style>
+          </head>
+          <body>
+             <h1>This is a test of the Emergency Broadcast System.  This is only a test. If this had been an actual emergency, you would have been instructed to tune to one of the broadcast stations in your area.</h1>
+          </body>
+        </html>
+        EndOfMessage
+
+        # Start httpd and set to start on boot
+        service httpd start
+        chkconfig httpd on
+
+        # Stop awslogs and set to not start on boot
+        service awslogs stop
+        chkconfig awslogs off
+
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  ProviderVPCPrivInstSn1Az1:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}--Private-Inst-Sn1-Az1'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPrivateSn1Az1
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'false'
+      UserData: !Base64 |+
+        #!/bin/bash -xe
+
+        # to make this all easier
+        sudo su
+
+        # Install needed packages for apache 2.4, and awslogs
+        yum install -y git gcc httpd24 httpd24-devel httpd24-tools mod24_ssl awslogs
+
+        # Build proxy protocol module for apache
+        git clone https://github.com/roadrunner2/mod-proxy-protocol.git
+        cd mod-proxy-protocol
+        make
+        cp .libs/mod_proxy_protocol.so /etc/httpd/modules/
+
+        # Copy my certificate to this host
+        # Note: Needs permissions to access S3 (role)
+        aws s3 cp s3://<add-link-to-your-cert>.crt /etc/pki/tls/certs/
+        aws s3 cp s3://<add-link-to-your-key>.key /etc/pki/tls/private/
+
+
+        # Edit httpd.conf with our virtual hosts and listener ports
+        cat >> /etc/httpd/conf/httpd.conf <<- EndOfMessage
+
+        Listen 8080
+        Listen 443 https
+
+        <VirtualHost *:80>
+            DocumentRoot /var/www/html/
+            # RewriteEngine On
+            # RewriteCond %{HTTP:X-Forwarded-Proto} =http
+            # RewriteRule . https://%{HTTP:Host}%{REQUEST_URI} [L,R=permanent]
+        </VirtualHost>
+
+        <VirtualHost *:8080>
+            DocumentRoot /var/www/html/
+            LoadModule proxy_protocol_module modules/mod_proxy_protocol.so
+            ProxyProtocol On
+            CustomLog /var/log/httpd/TCP-Proxy-Logs/access_log "%h %p %a %{remote}p %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\""
+            ErrorLog /var/log/httpd/TCP-Proxy-Logs/error_log
+        </VirtualHost>
+
+        <VirtualHost *:443>
+            SSLEngine on
+            SSLCertificateFile /etc/pki/tls/certs/<add-link-to-your-cert>.crt
+            SSLCertificateKeyFile /etc/pki/tls/private/<add-link-to-your-key>.key
+            <Directory /var/www/html>
+            AllowOverride All
+            </Directory>
+            DocumentRoot /var/www/html
+            CustomLog /var/log/httpd/ssl_access_log combined
+            ErrorLog /var/log/httpd/ssl_error_log
+        </VirtualHost>
+
+        EndOfMessage
+
+        # Move ssl.conf out of the way
+        sudo mv /etc/httpd/conf.d/ssl.conf /etc/httpd/conf.d/ssl.conf.old
+
+        # Make log directory for TCP listener on port 8080
+        mkdir /var/log/httpd/TCP-Proxy-Logs/
+
+        # Create awesome default webpage
+        cat >> /var/www/html/index.html <<- EndOfMessage
+        <html>
+          <head>
+            <title>Emergency Broadcast System</title>
+            <style>
+              html {
+                background: url(https://i.ytimg.com/vi/WiH8G0x2yWA/maxresdefault.jpg) no-repeat center center fixed;
+                background-size: cover;
+                -webkit-background-size: cover;
+                -moz-background-size: cover;
+                -o-background-size: cover;
+              }
+              h1 {
+                text-align: center;
+              }
+            </style>
+          </head>
+          <body>
+             <h1>This is a test of the Emergency Broadcast System.  This is only a test. If this had been an actual emergency, you would have been instructed to tune to one of the broadcast stations in your area.</h1>
+          </body>
+        </html>
+        EndOfMessage
+
+        # Start httpd and set to start on boot
+        service httpd start
+        chkconfig httpd on
+
+        # Stop awslogs and set to not start on boot
+        service awslogs stop
+        chkconfig awslogs off
+
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  ProviderVPCPubInstSn2Az2:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}--Public-Inst-Sn2-Az2'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn2Az2
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCPubInstSshSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpsSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'true'
+      UserData: !Base64 |+
+        #!/bin/bash -xe
+
+        # to make this all easier
+        sudo su
+
+        # Install needed packages for apache 2.4, and awslogs
+        yum install -y git gcc httpd24 httpd24-devel httpd24-tools mod24_ssl awslogs
+
+        # Build proxy protocol module for apache
+        git clone https://github.com/roadrunner2/mod-proxy-protocol.git
+        cd mod-proxy-protocol
+        make
+        cp .libs/mod_proxy_protocol.so /etc/httpd/modules/
+
+        # Copy my certificate to this host
+        # Note: Needs permissions to access S3 (role)
+        aws s3 cp s3://<add-link-to-your-cert>.crt /etc/pki/tls/certs/
+        aws s3 cp s3://<add-link-to-your-key>.key /etc/pki/tls/private/
+
+
+        # Edit httpd.conf with our virtual hosts and listener ports
+        cat >> /etc/httpd/conf/httpd.conf <<- EndOfMessage
+
+        Listen 8080
+        Listen 443 https
+
+        <VirtualHost *:80>
+            DocumentRoot /var/www/html/
+            # RewriteEngine On
+            # RewriteCond %{HTTP:X-Forwarded-Proto} =http
+            # RewriteRule . https://%{HTTP:Host}%{REQUEST_URI} [L,R=permanent]
+        </VirtualHost>
+
+        <VirtualHost *:8080>
+            DocumentRoot /var/www/html/
+            LoadModule proxy_protocol_module modules/mod_proxy_protocol.so
+            ProxyProtocol On
+            CustomLog /var/log/httpd/TCP-Proxy-Logs/access_log "%h %p %a %{remote}p %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\""
+            ErrorLog /var/log/httpd/TCP-Proxy-Logs/error_log
+        </VirtualHost>
+
+        <VirtualHost *:443>
+            SSLEngine on
+            SSLCertificateFile /etc/pki/tls/certs/<add-link-to-your-cert>.com.crt
+            SSLCertificateKeyFile /etc/pki/tls/private/<add-link-to-your-key>.com.key
+            <Directory /var/www/html>
+            AllowOverride All
+            </Directory>
+            DocumentRoot /var/www/html
+            CustomLog /var/log/httpd/ssl_access_log combined
+            ErrorLog /var/log/httpd/ssl_error_log
+        </VirtualHost>
+
+        EndOfMessage
+
+        # Move ssl.conf out of the way
+        sudo mv /etc/httpd/conf.d/ssl.conf /etc/httpd/conf.d/ssl.conf.old
+
+        # Make log directory for TCP listener on port 8080
+        mkdir /var/log/httpd/TCP-Proxy-Logs/
+
+        # Create awesome default webpage
+        cat >> /var/www/html/index.html <<- EndOfMessage
+        <html>
+          <head>
+            <title>Emergency Broadcast System</title>
+            <style>
+              html {
+                background: url(https://i.ytimg.com/vi/WiH8G0x2yWA/maxresdefault.jpg) no-repeat center center fixed;
+                background-size: cover;
+                -webkit-background-size: cover;
+                -moz-background-size: cover;
+                -o-background-size: cover;
+              }
+              h1 {
+                text-align: center;
+              }
+            </style>
+          </head>
+          <body>
+             <h1>This is a test of the Emergency Broadcast System.  This is only a test. If this had been an actual emergency, you would have been instructed to tune to one of the broadcast stations in your area.</h1>
+          </body>
+        </html>
+        EndOfMessage
+
+        # Start httpd and set to start on boot
+        service httpd start
+        chkconfig httpd on
+
+        # Stop awslogs and set to not start on boot
+        service awslogs stop
+        chkconfig awslogs off
+
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  ProviderVPCPrivInstSn2Az2:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Provider-VPC--Case-${CaseId}--Private-Inst-Sn2-Az2'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPrivateSn2Az2
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ProviderVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'false'
+      UserData: !Base64 |+
+        #!/bin/bash -xe
+
+        # to make this all easier
+        sudo su
+
+        # Install needed packages for apache 2.4, and awslogs
+        yum install -y git gcc httpd24 httpd24-devel httpd24-tools mod24_ssl awslogs
+
+        # Build proxy protocol module for apache
+        git clone https://github.com/roadrunner2/mod-proxy-protocol.git
+        cd mod-proxy-protocol
+        make
+        cp .libs/mod_proxy_protocol.so /etc/httpd/modules/
+
+        # Copy my certificate to this host
+        # Note: Needs permissions to access S3 (role)
+        aws s3 cp s3://<add-link-to-your-cert>.crt /etc/pki/tls/certs/
+        aws s3 cp s3://<add-link-to-your-key>.key /etc/pki/tls/private/
+
+
+        # Edit httpd.conf with our virtual hosts and listener ports
+        cat >> /etc/httpd/conf/httpd.conf <<- EndOfMessage
+
+        Listen 8080
+        Listen 443 https
+
+        <VirtualHost *:80>
+            DocumentRoot /var/www/html/
+            # RewriteEngine On
+            # RewriteCond %{HTTP:X-Forwarded-Proto} =http
+            # RewriteRule . https://%{HTTP:Host}%{REQUEST_URI} [L,R=permanent]
+        </VirtualHost>
+
+        <VirtualHost *:8080>
+            DocumentRoot /var/www/html/
+            LoadModule proxy_protocol_module modules/mod_proxy_protocol.so
+            ProxyProtocol On
+            CustomLog /var/log/httpd/TCP-Proxy-Logs/access_log "%h %p %a %{remote}p %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\""
+            ErrorLog /var/log/httpd/TCP-Proxy-Logs/error_log
+        </VirtualHost>
+
+        <VirtualHost *:443>
+            SSLEngine on
+            SSLCertificateFile /etc/pki/tls/certs/<add-link-to-your-cert>.crt
+            SSLCertificateKeyFile /etc/pki/tls/private/<add-link-to-your-key>.key
+            <Directory /var/www/html>
+            AllowOverride All
+            </Directory>
+            DocumentRoot /var/www/html
+            CustomLog /var/log/httpd/ssl_access_log combined
+            ErrorLog /var/log/httpd/ssl_error_log
+        </VirtualHost>
+
+        EndOfMessage
+
+        # Move ssl.conf out of the way
+        sudo mv /etc/httpd/conf.d/ssl.conf /etc/httpd/conf.d/ssl.conf.old
+
+        # Make log directory for TCP listener on port 8080
+        mkdir /var/log/httpd/TCP-Proxy-Logs/
+
+        # Create awesome default webpage
+        cat >> /var/www/html/index.html <<- EndOfMessage
+        <html>
+          <head>
+            <title>Emergency Broadcast System</title>
+            <style>
+              html {
+                background: url(https://i.ytimg.com/vi/WiH8G0x2yWA/maxresdefault.jpg) no-repeat center center fixed;
+                background-size: cover;
+                -webkit-background-size: cover;
+                -moz-background-size: cover;
+                -o-background-size: cover;
+              }
+              h1 {
+                text-align: center;
+              }
+            </style>
+          </head>
+          <body>
+             <h1>This is a test of the Emergency Broadcast System.  This is only a test. If this had been an actual emergency, you would have been instructed to tune to one of the broadcast stations in your area.</h1>
+          </body>
+        </html>
+        EndOfMessage
+
+        # Start httpd and set to start on boot
+        service httpd start
+        chkconfig httpd on
+
+        # Stop awslogs and set to not start on boot
+        service awslogs stop
+        chkconfig awslogs off
+
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  ConsumerVPCPubInstSn1Az1:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}--Public-Inst-Sn1-Az1'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ConsumerVPCPublicSn1Az1
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCPubInstSshSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCPubInstHttpSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCPubInstHttpsSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'true'
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  ConsumerVPCPrivInstSn1Az1:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}--Private-Inst-Sn1-Az1'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ConsumerVPCPrivateSn1Az1
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'false'
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  ConsumerVPCPubInstSn2Az2:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}--Public-Inst-Sn2-Az2'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ConsumerVPCPublicSn2Az2
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCPubInstSshSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCPubInstHttpSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCPubInstHttpsSG
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'true'
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  ConsumerVPCPrivInstSn2Az2:
+    Type: AWS::EC2::Instance
+    Properties:
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: !FindInMap
+        - !Ref 'AmazonLinuxAMIVersion'
+        - !Ref 'AWS::Region'
+        - hvm
+      InstanceType: t2.micro
+      KeyName: !Ref 'KeyPair'
+      Monitoring: 'false'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}--Private-Inst-Sn2-Az2'
+      NetworkInterfaces:
+        - DeleteOnTermination: 'true'
+          Description: Primary network interface
+          DeviceIndex: 0
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ConsumerVPCPrivateSn2Az2
+          GroupSet:
+            - !ImportValue
+              Fn::Sub: Case-${CaseId}-ConsumerVPCAllVpcCidrSG
+          AssociatePublicIpAddress: 'false'
+      IamInstanceProfile: !Ref 'CFTInstanceProfile'
+    DependsOn:
+      - CFTInstanceProfile
+  CFTEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      RoleName: CFT-EC2-Role-S3-and-CWL
+  CFTInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref 'CFTEC2Role'
+      InstanceProfileName: CFT-EC2-InstanceProfile
+    DependsOn:
+      - CFTEC2Role
+Outputs:
+  OutputProviderVPCPubInstSn1Az1:
+    Description: ProviderVPCPubInstSn1Az1
+    Value: !Ref 'ProviderVPCPubInstSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPubInstSn1Az1'
+  OutputProviderVPCPrivInstSn1Az1:
+    Description: ProviderVPCPrivInstSn1Az1
+    Value: !Ref 'ProviderVPCPrivInstSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPrivInstSn1Az1'
+  OutputProviderVPCPubInstSn2Az2:
+    Description: ProviderVPCPubInstSn2Az2
+    Value: !Ref 'ProviderVPCPubInstSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPubInstSn2Az2'
+  OutputProviderVPCPrivInstSn2Az2:
+    Description: ProviderVPCPrivInstSn2Az2
+    Value: !Ref 'ProviderVPCPrivInstSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ProviderVPCPrivInstSn2Az2'
+  OutputConsumerVPCPubInstSn1Az1:
+    Description: ConsumerVPCPubInstSn1Az1
+    Value: !Ref 'ConsumerVPCPubInstSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPubInstSn1Az1'
+  OutputConsumerVPCPrivInstSn1Az1:
+    Description: ConsumerVPCPrivInstSn1Az1
+    Value: !Ref 'ConsumerVPCPrivInstSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPrivInstSn1Az1'
+  OutputConsumerVPCPubInstSn2Az2:
+    Description: ConsumerVPCPubInstSn2Az2
+    Value: !Ref 'ConsumerVPCPubInstSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPubInstSn2Az2'
+  OutputConsumerVPCPrivInstSn2Az2:
+    Description: ConsumerVPCPrivInstSn2Az2
+    Value: !Ref 'ConsumerVPCPrivInstSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPrivInstSn2Az2'

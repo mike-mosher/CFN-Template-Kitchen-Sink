@@ -1,0 +1,315 @@
+Description: CFN-Template-Kitchen-Sink -- Load Balancers
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  CaseId:
+    Type: Number
+    Description: The Paragon Case ID for this environment
+    MinValue: '4000000000'
+    MaxValue: '5000000000'
+    ConstraintDescription: Must be a valid 10 digit number between 4000000000 and 5000000000
+Mappings:
+  AccessLogsAccount:
+    us-east-1:
+      acountid: '127311923021'
+    us-east-2:
+      acountid: 033677994240
+    us-west-1:
+      acountid: 027434742980
+    us-west-2:
+      acountid: '797873946194'
+    ca-central-1:
+      acountid: '985666609251'
+    eu-central-1:
+      acountid: 054676820928
+    eu-west-1:
+      acountid: '156460612806'
+    eu-west-2:
+      acountid: '652711504416'
+    eu-west-3:
+      acountid: 009996457667
+    ap-northeast-1:
+      acountid: '582318560864'
+    ap-northeast-2:
+      acountid: '600734575887'
+    ap-southeast-1:
+      acountid: '114774131450'
+    ap-southeast-2:
+      acountid: '783225319266'
+    ap-south-1:
+      acountid: '718504428378'
+    sa-east-1:
+      acountid: '507241528517'
+Resources:
+
+  EIP1:
+    Type: AWS::EC2::EIP
+  EIP2:
+    Type: AWS::EC2::EIP
+
+  # S3 Bucket
+  ProviderVPCAccessLogsS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: BucketOwnerFullControl
+      BucketName: !Sub 'provider-vpc--case-${CaseId}--access-logs'
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+  ProviderVPCAccessLogsS3BucketBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref 'ProviderVPCAccessLogsS3Bucket'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: Policy1429136655940
+        Statement:
+          - Sid: Stmt1429136633762
+            Effect: Allow
+            Principal:
+              AWS: !Sub
+                - arn:aws:iam::${Param1}:root
+                - Param1: !FindInMap
+                    - AccessLogsAccount
+                    - !Ref 'AWS::Region'
+                    - acountid
+            Action: s3:PutObject
+            Resource: !Sub 'arn:aws:s3:::provider-vpc--case-${CaseId}--access-logs/*/AWSLogs/${AWS::AccountId}/*'
+
+  # Classic Load Balancer
+  ProviderVPCElb:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      AccessLoggingPolicy:
+        EmitInterval: 5
+        Enabled: true
+        S3BucketName: !Sub 'provider-vpc--case-${CaseId}--access-logs'
+        S3BucketPrefix: Provider-VPC-ELB--Access-Logs
+      ConnectionDrainingPolicy:
+        Enabled: true
+        Timeout: 300
+      ConnectionSettings:
+        IdleTimeout: 60
+      CrossZone: true
+      HealthCheck:
+        HealthyThreshold: '2'
+        Interval: '15'
+        Target: HTTP:80/
+        Timeout: '5'
+        UnhealthyThreshold: '2'
+      Instances:
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPubInstSn1Az1
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPrivInstSn1Az1
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPubInstSn2Az2
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPrivInstSn2Az2
+      LBCookieStickinessPolicy:
+        - PolicyName: ProviderVPCElbLBCookieStickinessPolicy
+          CookieExpirationPeriod: '60'
+      LoadBalancerName: Provider-VPC-ELB
+      Listeners:
+        - InstancePort: '80'
+          InstanceProtocol: HTTP
+          Protocol: HTTP
+          LoadBalancerPort: '80'
+          PolicyNames:
+            - ProviderVPCElbLBCookieStickinessPolicy
+        - InstancePort: '8080'
+          InstanceProtocol: TCP
+          Protocol: TCP
+          LoadBalancerPort: '8080'
+        - InstancePort: '443'
+          InstanceProtocol: HTTPS
+          Protocol: HTTPS
+          LoadBalancerPort: '443'
+          SSLCertificateId: arn:aws:acm:us-west-2:803222876536:certificate/bdc40b58-d699-44d3-8f31-05ef9656125c
+          PolicyNames:
+            - ELBSecurityPolicy-2016-08
+      Policies:
+        - PolicyName: ProviderVPCElbProxyProtocolPolicy
+          PolicyType: ProxyProtocolPolicyType
+          Attributes:
+            - Name: ProxyProtocol
+              Value: true
+          InstancePorts:
+            - '8080'
+        - PolicyName: ProviderVPCElbPublicKeyPolicy
+          PolicyType: PublicKeyPolicyType
+          Attributes:
+            - Name: PublicKey
+              Value: |-
+                MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtslSbsjlldbseDWOLyRb
+                8ZUkTih1FuHfRwRLssNvypewj0S6d1pJPPAezNtoUJwuAgdCBgjXaApdistA7okp
+                jY9q3TvcMC4q2bjWYObchRZuB+8Vg2gsUd2ddxrqGTFmlc4lHJz4HZrGaUS5h4L0
+                HPDpgd7y8UmM/GBjzW9PZv+GlbHf41jazouWuAB2jDs1Bg5BlGQGJxukxu32ZgOb
+                A5Du4tClrP7uGXy3I9wkpy7X8cW1N6PB1BV2NY/22ZnsbSwNC75fuF9qXTQRtP9H
+                1qTQEWHMldgwU6re80/xaGDEWCPZnVcVMrAGXSHS9hKKDRCjDRWra+vTxbSaYygL
+                iwIDAQAB
+        - PolicyName: ProviderVPCElbBackendServerAuthenticationPolicy
+          PolicyType: BackendServerAuthenticationPolicyType
+          Attributes:
+            - Name: PublicKeyPolicyName
+              Value: ProviderVPCElbPublicKeyPolicy
+          InstancePorts:
+            - '443'
+      Scheme: internet-facing
+      SecurityGroups:
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpSG
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpsSG
+      Subnets:
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn1Az1
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn2Az2
+      Tags:
+        - Key: auto-delete
+          Value: 1 month
+        - Key: case
+          Value: !Ref 'CaseId'
+    DependsOn:
+      - ProviderVPCAccessLogsS3Bucket
+
+  # Application Load Balancer
+  ProviderVPCAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      IpAddressType: ipv4
+      Name: Provider-VPC-ALB
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: access_logs.s3.enabled
+          Value: 'true'
+        - Key: access_logs.s3.bucket
+          Value: !Sub 'provider-vpc--case-${CaseId}--access-logs'
+        - Key: access_logs.s3.prefix
+          Value: Provider-VPC-ALB--Access-Logs
+        - Key: deletion_protection.enabled
+          Value: 'false'
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      SecurityGroups:
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpSG
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPubInstHttpsSG
+      Subnets:
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn1Az1
+        - !ImportValue
+          Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn2Az2
+    DependsOn:
+      - ProviderVPCAccessLogsS3Bucket
+  ProviderVPCAlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: Provider-VPC-ALB-TG
+      Port: 80
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPC
+      Targets:
+        - Id: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPubInstSn1Az1
+          Port: 80
+        - Id: !ImportValue
+            Fn::Sub:  Case-${CaseId}-ProviderVPCPrivInstSn1Az1
+          Port: 80
+        - Id: !ImportValue
+            Fn::Sub:  Case-${CaseId}-ProviderVPCPubInstSn2Az2
+          Port: 80
+        - Id: !ImportValue
+            Fn::Sub:  Case-${CaseId}-ProviderVPCPrivInstSn2Az2
+          Port: 80
+      HealthCheckIntervalSeconds: 15
+      HealthCheckPort: '80'
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+  ProviderVPCAlbListener80:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref 'ProviderVPCAlbTargetGroup'
+          Type: forward
+      LoadBalancerArn: !Ref 'ProviderVPCAlb'
+      Port: 80
+      Protocol: HTTP
+  ProviderVPCAlbListener443:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        - CertificateArn: arn:aws:acm:us-west-2:803222876536:certificate/bdc40b58-d699-44d3-8f31-05ef9656125c
+      SslPolicy: ELBSecurityPolicy-2016-08
+      DefaultActions:
+        - TargetGroupArn: !Ref 'ProviderVPCAlbTargetGroup'
+          Type: forward
+      LoadBalancerArn: !Ref 'ProviderVPCAlb'
+      Port: 443
+      Protocol: HTTPS
+
+  # Network Load Balancer
+  ProviderVPCNlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: Provider-VPC-NLB
+      Type: network
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      SubnetMappings:
+        -
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn1Az1
+          AllocationId: !GetAtt EIP1.AllocationId
+        -
+          SubnetId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPublicSn2Az2
+          AllocationId: !GetAtt EIP2.AllocationId
+      Tags:
+        - Key: Name
+          Value: Provider-VPC-ALB
+  ProviderVPCNlbTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: Provider-VPC-NLB-TG
+      VpcId: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPC
+      Port: 80
+      Protocol: TCP
+      TargetType: instance
+      Targets:
+        - Id: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPubInstSn1Az1
+          Port: 80
+        - Id: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPrivInstSn1Az1
+          Port: 80
+        - Id: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPubInstSn2Az2
+          Port: 80
+        - Id: !ImportValue
+            Fn::Sub: Case-${CaseId}-ProviderVPCPrivInstSn2Az2
+          Port: 80
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPort: '80'
+      HealthCheckProtocol: TCP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+  NLBListener80:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref 'ProviderVPCNlbTargetGroup'
+          Type: forward
+      LoadBalancerArn: !Ref 'ProviderVPCNlb'
+      Port: 80
+      Protocol: TCP

@@ -1,0 +1,447 @@
+Description: CFN-Template-Kitchen-Sink -- Consumer VPC Resources
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  ConsumerVPCCidrBlock:
+    Type: String
+    Description: 'The /16 CIDR block for the Consumer VPC (Format Example: 172.31.0.0/16)'
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 172.31.0.0/16
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.0\.0/16
+    ConstraintDescription: Must be a valid IP CIDR block with a /16
+  CaseId:
+    Type: Number
+    Description: The Paragon Case ID for this environment
+    MinValue: '4000000000'
+    MaxValue: '5000000000'
+    ConstraintDescription: Must be a valid 10 digit number between 4000000000 and
+      5000000000
+Mappings:
+  AmazonLinuxAMI:
+    ap-south-1:
+      hvm: ami-d5c18eba
+    eu-west-3:
+      hvm: ami-dd8b3ca0
+    eu-west-2:
+      hvm: ami-e7d6c983
+    eu-west-1:
+      hvm: ami-1a962263
+    ap-northeast-2:
+      hvm: ami-1196317f
+    ap-northeast-1:
+      hvm: ami-da9e2cbc
+    sa-east-1:
+      hvm: ami-286f2a44
+    ca-central-1:
+      hvm: ami-d29e25b6
+    ap-southeast-1:
+      hvm: ami-c63d6aa5
+    ap-southeast-2:
+      hvm: ami-ff4ea59d
+    eu-central-1:
+      hvm: ami-bf2ba8d0
+    us-east-1:
+      hvm: ami-55ef662f
+    us-east-2:
+      hvm: ami-15e9c770
+    us-west-1:
+      hvm: ami-a51f27c5
+    us-west-2:
+      hvm: ami-bf4193c7
+  AmazonLinux2AMI:
+    ap-south-1:
+      hvm: ami-79c78f16
+    eu-west-3:
+      hvm: ami-185fe865
+    eu-west-2:
+      hvm: ami-424c5526
+    eu-west-1:
+      hvm: ami-b09e1ac9
+    ap-northeast-2:
+      hvm: ami-1559ff7b
+    ap-northeast-1:
+      hvm: ami-2a34b64c
+    sa-east-1:
+      hvm: ami-bd87c1d1
+    ca-central-1:
+      hvm: ami-9ab802fe
+    ap-southeast-1:
+      hvm: ami-b45030c8
+    ap-southeast-2:
+      hvm: ami-71867013
+    eu-central-1:
+      hvm: ami-29ae2546
+    us-east-1:
+      hvm: ami-2452275e
+    us-east-2:
+      hvm: ami-e97c548c
+    us-west-1:
+      hvm: ami-ee03078e
+    us-west-2:
+      hvm: ami-7707a10f
+Resources:
+  ConsumerVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref 'ConsumerVPCCidrBlock'
+      InstanceTenancy: default
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}'
+  ConsumerVPCPublicSn1Az1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.0.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ConsumerVPC'
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Pub-SN-1-AZ-1'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPrivateSn1Az1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.1.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '0'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ConsumerVPC'
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Priv-SN-1-AZ-1'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPublicSn2Az2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.2.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '1'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ConsumerVPC'
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Pub-SN-2-AZ-2'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPrivateSn2Az2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: !Sub
+        - ${Param1}.${Param2}.3.0/24
+        - Param1: !Select
+            - '0'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+          Param2: !Select
+            - '1'
+            - !Split
+              - .
+              - !Ref 'ConsumerVPCCidrBlock'
+      AvailabilityZone: !Select
+        - '1'
+        - !GetAZs
+          Ref: AWS::Region
+      VpcId: !Ref 'ConsumerVPC'
+      MapPublicIpOnLaunch: 'false'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Priv-SN-2-AZ-2'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPubRt1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'ConsumerVPC'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Pub-RT-1'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPrivRt1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'ConsumerVPC'
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Priv-RT-1'
+    DependsOn: ConsumerVPC
+  ConsumerVPCIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-IGW-1'
+  ConsumerVPCIGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'ConsumerVPC'
+      InternetGatewayId: !Ref 'ConsumerVPCIGW'
+    DependsOn:
+      - ConsumerVPC
+      - ConsumerVPCIGW
+  ConsumerVPCNatGWEip1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: ConsumerVPC
+    DependsOn: ConsumerVPC
+  ConsumerVPCNatGW:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'ConsumerVPCNatGWEip1.AllocationId'
+      SubnetId: !Ref 'ConsumerVPCPublicSn1Az1'
+    DependsOn: ConsumerVPCIGWAttachment
+  ConsumerVPCPubInstSshSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ConsumerVPCPubInstSshSG
+      GroupDescription: SSH Traffic from Everywhere
+      VpcId: !Ref 'ConsumerVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+          Description: SSH from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPubInstHttpSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ConsumerVPCPubInstHttpSG
+      GroupDescription: HTTP Traffic from Everywhere
+      VpcId: !Ref 'ConsumerVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+          Description: HTTP from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPubInstHttpsSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ConsumerVPCPubInstHttpsSG
+      GroupDescription: HTTPS Traffic from Everywhere
+      VpcId: !Ref 'ConsumerVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+          Description: HTTPS from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPubInstRdpSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ConsumerVPCPubInstRdpSG
+      GroupDescription: RDP Traffic from Everywhere
+      VpcId: !Ref 'ConsumerVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '3389'
+          ToPort: '3389'
+          CidrIp: 0.0.0.0/0
+          Description: RDP from Everywhere
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Pub-Inst-SG'
+    DependsOn: ConsumerVPC
+  ConsumerVPCAllVpcCidrSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ConsumerVPCAllVpcCidrSG
+      GroupDescription: SG for Private Instances in Consumer VPC
+      VpcId: !Ref 'ConsumerVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '0'
+          ToPort: '65535'
+          CidrIp: !Ref 'ConsumerVPCCidrBlock'
+          Description: Allow Consumer VPC CIDR to Private Instances
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Priv-Inst-SG'
+    DependsOn: ConsumerVPC
+  ConsumerVPCEndpointSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ConsumerVPCEndpointSG
+      GroupDescription: SG for VPC Endpoint in Consumer VPC
+      VpcId: !Ref 'ConsumerVPC'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '0'
+          ToPort: '65535'
+          CidrIp: !Ref 'ConsumerVPCCidrBlock'
+          Description: Allow Consumer VPC CIDR to Endpoint
+      Tags:
+        - Key: Name
+          Value: !Sub 'Consumer-VPC--Case-${CaseId}-Endpoint-SG'
+    DependsOn: ConsumerVPC
+  ConsumerVPCPubSn1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ConsumerVPCPubRt1'
+      SubnetId: !Ref 'ConsumerVPCPublicSn1Az1'
+    DependsOn:
+      - ConsumerVPCPublicSn1Az1
+      - ConsumerVPCPubRt1
+  ConsumerVPCPubSn2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ConsumerVPCPubRt1'
+      SubnetId: !Ref 'ConsumerVPCPublicSn2Az2'
+    DependsOn:
+      - ConsumerVPCPublicSn2Az2
+      - ConsumerVPCPubRt1
+  ConsumerVPCPrivSn1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ConsumerVPCPrivRt1'
+      SubnetId: !Ref 'ConsumerVPCPrivateSn1Az1'
+    DependsOn:
+      - ConsumerVPCPublicSn1Az1
+      - ConsumerVPCPrivRt1
+  ConsumerVPCPrivSn2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'ConsumerVPCPrivRt1'
+      SubnetId: !Ref 'ConsumerVPCPrivateSn2Az2'
+    DependsOn:
+      - ConsumerVPCPrivateSn2Az2
+      - ConsumerVPCPrivRt1
+  ConsumerVPCPublicDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref 'ConsumerVPCPubRt1'
+      GatewayId: !Ref 'ConsumerVPCIGW'
+    DependsOn:
+      - ConsumerVPCIGWAttachment
+      - ConsumerVPCIGW
+      - ConsumerVPCPubRt1
+  ConsumerVPCPrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref 'ConsumerVPCPrivRt1'
+      NatGatewayId: !Ref 'ConsumerVPCNatGW'
+    DependsOn:
+      - ConsumerVPCIGWAttachment
+      - ConsumerVPCNatGW
+      - ConsumerVPCPrivRt1
+Outputs:
+  OutputConsumerVPC:
+    Description: ConsumerVPC
+    Value: !Ref 'ConsumerVPC'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPC'
+  OutputConsumerVPCPublicSn1Az1:
+    Description: ConsumerVPCPublicSn1Az1
+    Value: !Ref 'ConsumerVPCPublicSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPublicSn1Az1'
+  OutputConsumerVPCPrivateSn1Az1:
+    Description: ConsumerVPCPrivateSn1Az1
+    Value: !Ref 'ConsumerVPCPrivateSn1Az1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPrivateSn1Az1'
+  OutputConsumerVPCPublicSn2Az2:
+    Description: ConsumerVPCPublicSn2Az2
+    Value: !Ref 'ConsumerVPCPublicSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPublicSn2Az2'
+  OutputConsumerVPCPrivateSn2Az2:
+    Description: ConsumerVPCPrivateSn2Az2
+    Value: !Ref 'ConsumerVPCPrivateSn2Az2'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPrivateSn2Az2'
+  OutputConsumerVPCPubInstSshSG:
+    Description: ConsumerVPCPubInstSshSG
+    Value: !Ref 'ConsumerVPCPubInstSshSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPubInstSshSG'
+  OutputConsumerVPCPubInstHttpSG:
+    Description: ConsumerVPCPubInstHttpSG
+    Value: !Ref 'ConsumerVPCPubInstHttpSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPubInstHttpSG'
+  OutputConsumerVPCPubInstHttpsSG:
+    Description: ConsumerVPCPubInstHttpsSG
+    Value: !Ref 'ConsumerVPCPubInstHttpsSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPubInstHttpsSG'
+  OutputConsumerVPCPubInstRdpSG:
+    Description: ConsumerVPCPubInstRdpSG
+    Value: !Ref 'ConsumerVPCPubInstRdpSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPubInstRdpSG'
+  OutputConsumerVPCAllVpcCidrSG:
+    Description: ConsumerVPCAllVpcCidrSG
+    Value: !Ref 'ConsumerVPCAllVpcCidrSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCAllVpcCidrSG'
+  OutputConsumerVPCEndpointSG:
+    Description: ConsumerVPCEndpointSG
+    Value: !Ref 'ConsumerVPCEndpointSG'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCEndpointSG'
+  OutputConsumerVPCPubRt1:
+    Description: ConsumerVPCPubRt1
+    Value: !Ref 'ConsumerVPCPubRt1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPubRt1'
+  OutputConsumerVPCPrivRt1:
+    Description: ConsumerVPCPrivRt1
+    Value: !Ref 'ConsumerVPCPrivRt1'
+    Export:
+      Name: !Sub 'Case-${CaseId}-ConsumerVPCPrivRt1'

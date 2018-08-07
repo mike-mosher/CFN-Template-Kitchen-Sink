@@ -1,0 +1,69 @@
+Description: CFN-Template-Kitchen-Sink -- VPC Peering Connection
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  ProviderVPCCidrBlock:
+    Type: String
+    Description: 'The /16 CIDR block for the Provider VPC (Format Example: 10.0.0.0/16)'
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 10.0.0.0/16
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.0\.0/16
+    ConstraintDescription: Must be a valid IP CIDR block with a /16
+  ConsumerVPCCidrBlock:
+    Type: String
+    Description: 'The /16 CIDR block for the Consumer VPC (Format Example: 172.31.0.0/16)'
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 172.31.0.0/16
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.0\.0/16
+    ConstraintDescription: Must be a valid IP CIDR block with a /16
+  CaseId:
+    Type: Number
+    Description: The Paragon Case ID for this environment
+    MinValue: '4000000000'
+    MaxValue: '5000000000'
+    ConstraintDescription: Must be a valid 10 digit number between 4000000000 and
+      5000000000
+Resources:
+  VPCPeeringConnection:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      VpcId: !ImportValue
+        Fn::Sub: Case-${CaseId}-ProviderVPC
+      PeerVpcId: !ImportValue
+        Fn::Sub: Case-${CaseId}-ConsumerVPC
+      Tags:
+        - Key: Name
+          Value: !Sub 'Provider-VPC--to--Consumer-VPC--Case-${CaseId}'
+  ProviderVPCPeeringPubRTRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: !Ref 'ConsumerVPCCidrBlock'
+      RouteTableId: !ImportValue
+        Fn::Sub: Case-${CaseId}-ProviderVPCPubRt1
+      VpcPeeringConnectionId: !Ref 'VPCPeeringConnection'
+    DependsOn: VPCPeeringConnection
+  ProviderVPCPeeringPrivRTRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: !Ref 'ConsumerVPCCidrBlock'
+      RouteTableId: !ImportValue
+        Fn::Sub: Case-${CaseId}-ProviderVPCPrivRt1
+      VpcPeeringConnectionId: !Ref 'VPCPeeringConnection'
+    DependsOn: VPCPeeringConnection
+  ConsumerVPCPeeringPubRTRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: !Ref 'ProviderVPCCidrBlock'
+      RouteTableId: !ImportValue
+        Fn::Sub: Case-${CaseId}-ConsumerVPCPubRt1
+      VpcPeeringConnectionId: !Ref 'VPCPeeringConnection'
+    DependsOn: VPCPeeringConnection
+  ConsumerVPCPeeringPrivRTRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: !Ref 'ProviderVPCCidrBlock'
+      RouteTableId: !ImportValue
+        Fn::Sub: Case-${CaseId}-ConsumerVPCPrivRt1
+      VpcPeeringConnectionId: !Ref 'VPCPeeringConnection'
+    DependsOn: VPCPeeringConnection
